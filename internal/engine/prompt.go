@@ -39,9 +39,9 @@ Respond with ONE JSON object and nothing else, in this exact shape:
   ],
   "notes": "optional one-line view of the market"
 }
-Fields: action is "buy", "sell" or "hold"; lots is a positive integer; limit_price is a VND price on a valid tick inside the band, or 0 for the open; confidence is 0–100.
+Fields: action is "buy" or "sell" (list only the orders you want; do not list holds); lots is a positive integer; limit_price is a VND price on a valid tick inside the band, or 0 for the open; confidence is 0–100; reasoning is at most 30 words. Keep the whole reply under 1500 characters so it is never cut off.
 
-Common mistakes to avoid: inventing a symbol or a suffix ("FPT.HM"); quoting prices in thousands (write 120000, not 120.0); selling shares that have not settled; buying with cash that is still receivable; more than one order for the same symbol; returning prose or markdown around the JSON.`)
+Common mistakes to avoid: inventing a symbol or a suffix ("FPT.HM"); quoting prices in thousands (write 120000, not 120.0); selling shares that have not settled (check the "settled" count); buying with cash that is still receivable; more than one order for the same symbol; returning prose or markdown around the JSON.`)
 	return b.String()
 }
 

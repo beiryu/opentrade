@@ -139,7 +139,7 @@ func (d *deps) decider(name string) (engine.Decider, error) {
 			return nil, errors.New("OPENTRADE_LLM_API_KEY is not set; use --decider momentum or random to run without a model")
 		}
 		c, err := llm.New(llm.Options{BaseURL: d.cfg.LLMBaseURL, APIKey: d.cfg.LLMAPIKey, Model: d.cfg.LLMModel,
-			JSONMode: true, Temperature: 0.2, MaxTokens: 1500, Timeout: 90 * time.Second, Retries: 1})
+			JSONMode: true, Temperature: 0.2, MaxTokens: 4000, Timeout: 120 * time.Second, Retries: 1})
 		if err != nil {
 			return nil, err
 		}
