@@ -27,6 +27,8 @@ Beat random trading but not the index: holding VN-Index would have done better.
 
 That is the momentum baseline on the **synthetic** sample data. It is here to show the output, not to claim anything.
 
+With a real model (`deepseek/deepseek-v4.1-flash` through the AI Gateway) over one synthetic month, the same command took 22 decisions in under two minutes, ~5 s and ~2,800 tokens each, and the guard log caught the model trying to sell shares bought the day before (`nothing_to_sell: no settled shares of GAS (held 200, settled 0)`). One reply was cut off mid-JSON and was recorded as a decider error with no orders placed. The scorecard's verdict was "Too short to say anything", which is the correct answer for 22 days.
+
 ## What it is, and is not
 
 - **Is**: a measuring instrument for "can a model trade VN stocks?" with the market's rules built in, a transparent log of every decision, and two baselines that any strategy has to beat.
