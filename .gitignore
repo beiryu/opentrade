@@ -1,0 +1,32 @@
+# Go
+/opentrade
+/bin/
+*.test
+*.out
+coverage.*
+
+# Node
+node_modules/
+web/dist/
+web/.vite/
+*.tsbuildinfo
+
+# Local state: never commit keys or databases
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+*.sqlite
+data/local/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Built web app embedded into the binary (make web)
+internal/api/ui/dist/*
+!internal/api/ui/dist/.gitkeep
