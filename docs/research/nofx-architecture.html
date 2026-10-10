@@ -1,0 +1,249 @@
+<title>NOFX Architecture</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one wide diagram first, then short notes in a 65ch column. Cool slate neutrals, orange = the LLM, teal = code guard rails. */
+  :root {
+    --bg: #f5f7fa;
+    --fg: #1b2430;
+    --muted: #5d6878;
+    --line: #c6ced9;
+    --panel: #ffffff;
+    --accent: #d9530f;
+    --accent-soft: #fdebe0;
+    --guard: #0e7c73;
+    --guard-soft: #dff4f1;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f141a; --fg: #e6e9ee; --muted: #9aa5b5; --line: #2b3542; --panel: #161d26;
+      --accent: #ff8e4a; --accent-soft: #3a2415; --guard: #2fd1bf; --guard-soft: #113633;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f141a; --fg: #e6e9ee; --muted: #9aa5b5; --line: #2b3542; --panel: #161d26;
+    --accent: #ff8e4a; --accent-soft: #3a2415; --guard: #2fd1bf; --guard-soft: #113633;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 56px; display: grid; gap: 28px; }
+  header h1 { font-size: 1.6rem; font-weight: 600; margin: 0 0 6px; text-wrap: balance; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); max-width: 65ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  .meta span b { color: var(--fg); font-weight: 500; }
+  figure { margin: 0; }
+  .diagram { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+  .diagram svg { display: block; width: 100%; min-width: 760px; height: auto; font-family: var(--sans); }
+  svg text { fill: var(--fg); font-size: 12px; }
+  svg .h { font-weight: 600; font-size: 12.5px; }
+  svg .m { fill: var(--muted); font-size: 11px; }
+  svg .mono { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+  svg .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+  svg .container { fill: none; stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 5 4; }
+  svg .step { fill: var(--bg); stroke: var(--line); stroke-width: 1.2; }
+  svg .llm { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; }
+  svg .guard { fill: var(--guard-soft); stroke: var(--guard); stroke-width: 1.6; }
+  svg .edge { stroke: var(--fg); stroke-width: 1.2; fill: none; }
+  svg .edge.dash { stroke-dasharray: 4 4; stroke: var(--muted); }
+  svg .edge.acc { stroke: var(--accent); stroke-width: 1.6; }
+  svg .lbl { font-size: 11px; fill: var(--muted); }
+  svg .lbl.acc { fill: var(--accent); }
+  svg .lbl.g { fill: var(--guard); }
+  figcaption { color: var(--muted); font-size: 13.5px; margin-top: 10px; max-width: 75ch; }
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px 32px; }
+  .notes h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  .notes p, .notes li { max-width: 65ch; margin: 0; }
+  .notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+  .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; border: 1.5px solid; }
+  .legend .a { background: var(--accent-soft); border-color: var(--accent); }
+  .legend .g { background: var(--guard-soft); border-color: var(--guard); }
+  .legend .s { background: var(--bg); border-color: var(--line); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  td:first-child { color: var(--muted); white-space: nowrap; }
+  .tbl { overflow-x: auto; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>NOFX: chiến lược là một mô hình ngôn ngữ</h1>
+    <p>Sơ đồ từ source trên nhánh <code>dev</code> (commit 04/10/2026). NOFX không có công thức chiến lược. Mỗi vài phút nó gom trạng thái tài khoản và thị trường thành một prompt, gửi cho LLM, nhận về danh sách lệnh dạng JSON, lọc qua các chốt an toàn viết bằng code, rồi đặt lệnh lên sàn.</p>
+    <div class="meta">
+      <span>Backend <b>Go (Gin, gorm, SQLite)</b></span>
+      <span>Frontend <b>React / TypeScript</b></span>
+      <span>Sàn <b>9 adapter trong trader/</b></span>
+      <span>License <b>AGPL-3.0</b></span>
+    </div>
+  </header>
+
+  <figure>
+    <div class="diagram">
+    <svg viewBox="0 0 1000 690" role="img" aria-label="Một vòng runCycle của AutoTrader: dữ liệu từ sàn và các nhà cung cấp dữ liệu đi vào StrategyEngine, thành prompt gửi LLM, LLM trả JSON quyết định, code lọc qua guard rails rồi đặt lệnh lên sàn; mọi thứ được ghi vào SQLite và hiện lên web UI, Telegram.">
+      <defs>
+        <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- ===== LEFT COLUMN: inputs ===== -->
+      <rect class="box" x="30" y="80" width="210" height="70" rx="4"/>
+      <text class="h" x="42" y="100">Sàn giao dịch</text>
+      <text class="mono" x="42" y="116">trader/{binance,bybit,okx,hyperliquid,</text>
+      <text class="mono" x="42" y="130">bitget,kucoin,gate,aster,lighter}</text>
+      <text class="m" x="42" y="144">1 interface Trader, 9 adapter</text>
+
+      <rect class="box" x="30" y="160" width="210" height="60" rx="4"/>
+      <text class="h" x="42" y="180">Dữ liệu thị trường</text>
+      <text class="mono" x="42" y="196">market/</text>
+      <text class="m" x="42" y="211">klines đa khung · EMA MACD RSI ATR</text>
+
+      <rect class="box" x="30" y="235" width="210" height="85" rx="4"/>
+      <text class="h" x="42" y="255">Data providers (bên thứ ba)</text>
+      <text class="mono" x="42" y="271">provider/coinank</text>
+      <text class="m" x="190" y="271" text-anchor="end">OI, net flow</text>
+      <text class="mono" x="42" y="286">provider/nofxos</text>
+      <text class="m" x="190" y="286" text-anchor="end">AI500, rankings</text>
+      <text class="mono" x="42" y="301">provider/vergex</text>
+      <text class="m" x="190" y="301" text-anchor="end">direction board</text>
+      <text class="m" x="42" y="315">twelvedata · alpaca (US stocks)</text>
+
+      <!-- left → center arrows -->
+      <line class="edge" x1="240" y1="105" x2="300" y2="105" marker-end="url(#arw)"/>
+      <text class="lbl" x="270" y="98" text-anchor="middle">balance,</text>
+      <text class="lbl" x="270" y="118" text-anchor="middle">positions</text>
+      <line class="edge" x1="240" y1="190" x2="300" y2="190" marker-end="url(#arw)"/>
+      <line class="edge" x1="240" y1="277" x2="300" y2="277" marker-end="url(#arw)"/>
+
+      <!-- orders back to exchange: loop around the bottom-left -->
+      <path class="edge" d="M500,620 V660 H14 V130 H30" marker-end="url(#arw)"/>
+      <text class="lbl" x="260" y="675" text-anchor="middle">đặt lệnh mở / đóng · SetLeverage · stop-loss, take-profit đặt trên sàn</text>
+
+      <!-- ===== CENTER: AutoTrader loop ===== -->
+      <rect class="container" x="290" y="40" width="420" height="600" rx="6"/>
+      <text class="h" x="300" y="60">AutoTrader</text>
+      <text class="mono" x="380" y="60">trader/auto_trader_loop.go · runCycle() mỗi ScanInterval, 1 goroutine / trader</text>
+
+      <rect class="step" x="300" y="80" width="400" height="50" rx="4"/>
+      <text class="h" x="312" y="99">1. buildTradingContext()</text>
+      <text class="m" x="312" y="116">tài khoản, vị thế đang mở, 10 lệnh đã đóng gần nhất, thống kê thắng/thua, P&amp;L</text>
+
+      <line class="edge" x1="500" y1="130" x2="500" y2="150" marker-end="url(#arw)"/>
+
+      <rect class="step" x="300" y="150" width="400" height="130" rx="4"/>
+      <text class="h" x="312" y="169">2. kernel.StrategyEngine</text>
+      <text class="m" x="312" y="188">chọn coin ứng viên: danh sách tĩnh · AI500 · OI top/low · Hyper rank · Vergex signal</text>
+      <text class="m" x="312" y="206">gom klines + chỉ báo + quant data (OI, net flow) cho từng coin</text>
+      <text class="m" x="312" y="224">prompt_builder: system prompt (luật, schema JSON, lỗi thường gặp)</text>
+      <text class="m" x="312" y="242">+ user prompt (toàn bộ Context ở trên dưới dạng text)</text>
+      <text class="mono" x="312" y="266">kernel/{engine,prompt_builder,schema}.go · Strategy Studio chỉnh preset, coin, leverage, prompt</text>
+
+      <line class="edge" x1="500" y1="280" x2="500" y2="300" marker-end="url(#arw)"/>
+
+      <rect class="llm" x="300" y="300" width="400" height="70" rx="4"/>
+      <text class="h" x="312" y="320">3. Gọi LLM qua mcp.AIClient</text>
+      <text class="m" x="312" y="338">một lần gọi mỗi cycle, không tool-calling, không nhớ giữa các cycle</text>
+      <text class="m" x="312" y="356">model trả về chain-of-thought + JSON; CoT được lưu nguyên văn để xem lại</text>
+
+      <line class="edge" x1="500" y1="370" x2="500" y2="390" marker-end="url(#arw)"/>
+
+      <rect class="step" x="300" y="390" width="400" height="50" rx="4"/>
+      <text class="h" x="312" y="409">4. Parse → []kernel.Decision</text>
+      <text class="mono" x="312" y="427">symbol · action (open_long/short, close, hold, wait) · leverage · position_size_usd · stop_loss · take_profit · confidence · reasoning</text>
+
+      <line class="edge" x1="500" y1="440" x2="500" y2="460" marker-end="url(#arw)"/>
+
+      <rect class="guard" x="300" y="460" width="400" height="90" rx="4"/>
+      <text class="h" x="312" y="479">5. Guard rails (code, ngoài tầm model)</text>
+      <text class="m" x="312" y="497">loại symbol ngoài universe · sắp xếp đóng trước, mở sau · Vergex signal policy</text>
+      <text class="m" x="312" y="514">safe mode sau 3 lần AI lỗi liên tiếp: chỉ cho đóng, không cho mở</text>
+      <text class="m" x="312" y="531">throttle · max positions · size/equity ratio · min size · tạm dừng khi drawdown ngày</text>
+      <text class="mono" x="312" y="545">trader/auto_trader_{risk,throttle,signal_policy}.go</text>
+
+      <line class="edge" x1="500" y1="550" x2="500" y2="570" marker-end="url(#arw)"/>
+
+      <rect class="step" x="300" y="570" width="400" height="50" rx="4"/>
+      <text class="h" x="312" y="589">6. executeDecisionWithRecord() → trader.Trader</text>
+      <text class="m" x="312" y="606">mỗi decision một lệnh; dừng ngay nếu người dùng bấm Stop giữa chừng</text>
+
+      <!-- ===== RIGHT COLUMN ===== -->
+      <rect class="box" x="760" y="80" width="210" height="60" rx="4"/>
+      <text class="h" x="772" y="100">TraderManager</text>
+      <text class="mono" x="772" y="116">manager/trader_manager.go</text>
+      <text class="m" x="772" y="131">nhiều trader song song: sàn + strategy + model</text>
+      <line class="edge" x1="760" y1="110" x2="710" y2="110" marker-end="url(#arw)"/>
+      <text class="lbl" x="735" y="103" text-anchor="middle">start/stop</text>
+
+      <rect class="llm" x="760" y="300" width="210" height="70" rx="4"/>
+      <text class="h" x="772" y="320">Nhà cung cấp LLM</text>
+      <text class="m" x="772" y="337">DeepSeek · OpenAI · Claude · Qwen</text>
+      <text class="m" x="772" y="351">Gemini · Grok · Kimi · MiniMax (BYOK)</text>
+      <text class="m" x="772" y="365">hoặc Claw402: trả USDC mỗi lần gọi (x402)</text>
+      <line class="edge acc" x1="700" y1="322" x2="760" y2="322" marker-end="url(#arw)"/>
+      <text class="lbl acc" x="730" y="315" text-anchor="middle">prompt</text>
+      <line class="edge acc" x1="760" y1="350" x2="700" y2="350" marker-end="url(#arw)"/>
+      <text class="lbl acc" x="730" y="364" text-anchor="middle">CoT + JSON</text>
+
+      <rect class="box" x="760" y="410" width="210" height="90" rx="4"/>
+      <text class="h" x="772" y="430">Store</text>
+      <text class="mono" x="820" y="430">store/ · SQLite via gorm</text>
+      <text class="m" x="772" y="448">decision record: system prompt, user prompt,</text>
+      <text class="m" x="772" y="462">CoT, raw response, danh sách lệnh, lỗi</text>
+      <text class="m" x="772" y="476">positions, orders, equity snapshot</text>
+      <text class="m" x="772" y="490">ai_charge: chi phí mỗi lần gọi model</text>
+      <line class="edge dash" x1="710" y1="455" x2="760" y2="455" marker-end="url(#arw)"/>
+      <text class="lbl" x="735" y="448" text-anchor="middle">ghi mỗi cycle</text>
+
+      <line class="edge" x1="865" y1="500" x2="865" y2="520" marker-end="url(#arw)"/>
+
+      <rect class="box" x="760" y="520" width="210" height="60" rx="4"/>
+      <text class="h" x="772" y="540">API + Web UI</text>
+      <text class="mono" x="772" y="556">api/ (Gin, JWT) · web/ (React, Vite)</text>
+      <text class="m" x="772" y="571">Strategy Studio, dashboard, leaderboard</text>
+
+      <line class="edge" x1="865" y1="580" x2="865" y2="600" marker-end="url(#arw)"/>
+
+      <rect class="box" x="760" y="600" width="210" height="40" rx="4"/>
+      <text class="h" x="772" y="618">Telegram bot + trợ lý</text>
+      <text class="mono" x="772" y="632">telegram/ · agents.md: 80% skill, 20% planning</text>
+    </svg>
+    </div>
+    <figcaption>Một vòng <code>runCycle()</code>. Màu cam là phần do mô hình ngôn ngữ quyết định, màu xanh là phần code chặn lại sau khi model đã quyết. Song song với vòng này còn một goroutine theo dõi drawdown từng vị thế và tự đóng khi lợi nhuận rơi khỏi đỉnh quá ngưỡng, không cần hỏi model.</figcaption>
+    <div class="legend" style="margin-top:8px">
+      <span><i class="s"></i>Code thường</span>
+      <span><i class="a"></i>LLM quyết định</span>
+      <span><i class="g"></i>Chốt an toàn bằng code</span>
+    </div>
+  </figure>
+
+  <section class="notes">
+    <div>
+      <h2>Bản chất</h2>
+      <ul>
+        <li><strong>Không có backtest.</strong> Chiến lược là prompt + model, nên không thể chạy lại trên dữ liệu quá khứ để đo. Cách duy nhất để biết nó có lời không là chạy thật hoặc paper.</li>
+        <li><strong>Mỗi cycle là một câu hỏi độc lập.</strong> Model không có bộ nhớ giữa các vòng. "Ký ức" duy nhất là 10 lệnh đã đóng gần nhất và thống kê thắng/thua được nhét lại vào prompt.</li>
+        <li><strong>Model quyết định cả size và leverage.</strong> JSON trả về có <code>leverage</code>, <code>position_size_usd</code>, <code>stop_loss</code>, <code>take_profit</code>. Code chỉ kẹp lại trong giới hạn bạn đặt, không tự tính.</li>
+        <li><strong>Phần an toàn thật nằm ở code.</strong> Safe mode, max positions, drawdown monitor, stop-loss đặt thẳng trên sàn. Đây là lớp đáng tin nhất của hệ thống, vì không phụ thuộc model.</li>
+        <li><strong>Phụ thuộc dịch vụ bên ngoài.</strong> Coin ứng viên và tín hiệu lấy từ coinank, nofxos, vergex (công ty đứng sau dự án). Link sàn là referral. Claw402 là cổng trả tiền theo lần gọi của họ.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>So với bot truyền thống</h2>
+      <div class="tbl">
+      <table>
+        <tr><th></th><th>freqtrade</th><th>NOFX</th></tr>
+        <tr><td>Chiến lược</td><td>Hàm Python trên indicator, xác định</td><td>Prompt gửi LLM, không xác định</td></tr>
+        <tr><td>Kiểm chứng</td><td>Backtest, hyperopt, dry-run</td><td>Chỉ chạy thật hoặc paper</td></tr>
+        <tr><td>Chi phí mỗi quyết định</td><td>Gần 0</td><td>1 lần gọi model, có bảng <code>ai_charge</code></td></tr>
+        <tr><td>Giải thích</td><td>Đọc code</td><td>Đọc chain-of-thought lưu trong DB</td></tr>
+        <tr><td>Rủi ro riêng</td><td>Overfit khi hyperopt</td><td>Model ảo giác symbol, size; lệch theo prompt</td></tr>
+      </table>
+      </div>
+      <p style="margin-top:12px;color:var(--muted);font-size:13.5px">Chính source tự xử lý việc model echo sai symbol: <code>universeBaseKey()</code> chấp nhận "QNTUSDC", "QNT-USDC" hay "QNT" cho cùng một instrument.</p>
+    </div>
+  </section>
+</div>
