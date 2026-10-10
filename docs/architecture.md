@@ -1,5 +1,7 @@
 # Architecture
 
+A drawn version of this page, with the T+2 timeline, is in [architecture.html](architecture.html) (open it in a browser).
+
 OpenTrade is one Go binary (API + CLI, web app embedded) and one SQLite file. There are no services, queues or background workers: a decision is a function call, and `replay` is that call in a loop.
 
 ```

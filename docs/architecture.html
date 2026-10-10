@@ -1,0 +1,304 @@
+<title>OpenTrade Architecture</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one wide system diagram, one timeline for T+2, then short notes. Same palette as the NOFX diagram: slate ground, orange = model, teal = code guard rails. */
+  :root {
+    --bg: #f5f7fa; --fg: #1b2430; --muted: #5d6878; --line: #c6ced9; --panel: #ffffff;
+    --accent: #d9530f; --accent-soft: #fdebe0; --guard: #0e7c73; --guard-soft: #dff4f1;
+    --store: #4c5fd5; --store-soft: #e6e9fb;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f141a; --fg: #e6e9ee; --muted: #9aa5b5; --line: #2b3542; --panel: #161d26;
+      --accent: #ff8e4a; --accent-soft: #3a2415; --guard: #2fd1bf; --guard-soft: #113633;
+      --store: #8b9bff; --store-soft: #1c2142; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f141a; --fg: #e6e9ee; --muted: #9aa5b5; --line: #2b3542; --panel: #161d26;
+    --accent: #ff8e4a; --accent-soft: #3a2415; --guard: #2fd1bf; --guard-soft: #113633;
+    --store: #8b9bff; --store-soft: #1c2142; color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 56px; display: grid; gap: 28px; }
+  header h1 { font-size: 1.6rem; font-weight: 600; margin: 0 0 6px; text-wrap: balance; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); max-width: 70ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  .meta span b { color: var(--fg); font-weight: 500; }
+  figure { margin: 0; }
+  .diagram { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+  .diagram svg { display: block; width: 100%; min-width: 760px; height: auto; font-family: var(--sans); }
+  svg text { fill: var(--fg); font-size: 12px; }
+  svg .h { font-weight: 600; font-size: 12.5px; }
+  svg .m { fill: var(--muted); font-size: 11px; }
+  svg .mono { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+  svg .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+  svg .container { fill: none; stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 5 4; }
+  svg .step { fill: var(--bg); stroke: var(--line); stroke-width: 1.2; }
+  svg .llm { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.6; }
+  svg .guard { fill: var(--guard-soft); stroke: var(--guard); stroke-width: 1.6; }
+  svg .store { fill: var(--store-soft); stroke: var(--store); stroke-width: 1.4; }
+  svg .edge { stroke: var(--fg); stroke-width: 1.2; fill: none; }
+  svg .edge.dash { stroke-dasharray: 4 4; stroke: var(--muted); }
+  svg .edge.acc { stroke: var(--accent); stroke-width: 1.6; }
+  svg .edge.st { stroke: var(--store); }
+  svg .lbl { font-size: 11px; fill: var(--muted); }
+  svg .lbl.acc { fill: var(--accent); }
+  svg .lbl.st { fill: var(--store); }
+  svg .day { fill: var(--panel); stroke: var(--line); }
+  svg .day.hi { fill: var(--guard-soft); stroke: var(--guard); }
+  figcaption { color: var(--muted); font-size: 13.5px; margin-top: 10px; max-width: 78ch; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; border: 1.5px solid; }
+  .legend .a { background: var(--accent-soft); border-color: var(--accent); }
+  .legend .g { background: var(--guard-soft); border-color: var(--guard); }
+  .legend .s { background: var(--bg); border-color: var(--line); }
+  .legend .d { background: var(--store-soft); border-color: var(--store); }
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px 32px; }
+  .notes h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  .notes p, .notes li { max-width: 65ch; margin: 0; }
+  .notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  td:first-child { color: var(--muted); white-space: nowrap; }
+  .tbl { overflow-x: auto; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>OpenTrade: một binary, một file SQLite, một quyết định mỗi phiên</h1>
+    <p>Sơ đồ theo source tại <code>github.com/beiryu/opentrade</code> (10/10/2026). Không có service, queue hay worker nền. Một quyết định là một lời gọi hàm; <code>replay</code> là lời gọi đó trong vòng lặp qua từng phiên lịch sử.</p>
+    <div class="meta">
+      <span>Backend <b>Go 1.26, stdlib net/http, modernc sqlite</b></span>
+      <span>UI <b>React 19 + Vite, nhúng vào binary</b></span>
+      <span>License <b>MIT</b></span>
+      <span>Dòng Go <b>~3.000 + test</b></span>
+    </div>
+  </header>
+
+  <figure>
+    <div class="diagram">
+    <svg viewBox="0 0 1000 700" role="img" aria-label="Kiến trúc OpenTrade: dữ liệu CSV và cấu hình đi vào engine.Cycle gồm năm bước (context, decider, guards, paper broker, ghi store); hôm sau engine.Roll khớp lệnh và tất toán T+2; store SQLite được API và web đọc; CLI gọi cycle, replay, serve.">
+      <defs>
+        <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- LEFT: inputs -->
+      <rect class="box" x="30" y="80" width="210" height="80" rx="4"/>
+      <text class="h" x="42" y="100">Dữ liệu ngày</text>
+      <text class="mono" x="42" y="116">data/*.csv · market.CSVProvider</text>
+      <text class="m" x="42" y="131">date,open,high,low,close,volume</text>
+      <text class="m" x="42" y="146">VNINDEX.csv = lịch giao dịch</text>
+      <text class="mono" x="42" y="158">roadmap: provider DNSE, SSI</text>
+      <line class="edge" x1="240" y1="105" x2="300" y2="105" marker-end="url(#arw)"/>
+      <text class="lbl" x="270" y="98" text-anchor="middle">60 bars</text>
+
+      <rect class="box" x="30" y="180" width="210" height="70" rx="4"/>
+      <text class="h" x="42" y="200">Cấu hình</text>
+      <text class="mono" x="42" y="216">.env · OPENTRADE_*</text>
+      <text class="m" x="42" y="231">universe 10 mã, sàn, vốn, giới hạn</text>
+      <text class="m" x="42" y="245">base URL + key + model của LLM</text>
+      <line class="edge dash" x1="240" y1="215" x2="290" y2="215"/>
+
+      <rect class="box" x="30" y="280" width="210" height="110" rx="4"/>
+      <text class="h" x="42" y="300">Luật thị trường VN</text>
+      <text class="mono" x="42" y="316">internal/rules</text>
+      <text class="m" x="42" y="331">lô 100 · bước giá 10/50/100</text>
+      <text class="m" x="42" y="345">biên độ ±7 HOSE ±10 HNX ±15 UPCOM</text>
+      <text class="m" x="42" y="359">T+2 · phí 0,15 % · thuế bán 0,1 %</text>
+      <text class="m" x="42" y="378">hàm thuần, dùng ở guards và broker</text>
+      <path class="edge dash" d="M240,335 H270 V470 H300" marker-end="url(#arw)"/>
+      <path class="edge dash" d="M270,335 V560 H300" marker-end="url(#arw)"/>
+
+      <!-- CENTER: Cycle -->
+      <rect class="container" x="290" y="40" width="420" height="560" rx="6"/>
+      <text class="h" x="300" y="60">engine.Cycle(D)</text>
+      <text class="mono" x="415" y="60">sau giờ đóng cửa ngày D · internal/engine/cycle.go</text>
+
+      <rect class="step" x="300" y="80" width="400" height="60" rx="4"/>
+      <text class="h" x="312" y="99">1. BuildContext</text>
+      <text class="m" x="312" y="116">tiền khả dụng, tiền chờ về, vị thế (đã về / chưa về), VN-Index, 10 lệnh gần nhất</text>
+      <text class="m" x="312" y="131">mỗi mã: close, sàn/trần phiên sau, SMA20/50, RSI14, ATR14, ret5/20, vol ratio</text>
+
+      <line class="edge" x1="500" y1="140" x2="500" y2="160" marker-end="url(#arw)"/>
+
+      <rect class="step" x="300" y="160" width="400" height="30" rx="4"/>
+      <text class="h" x="312" y="180">2. Decider</text>
+      <text class="mono" x="400" y="180">interface { Decide(ctx, *Context) (Outcome, error) }</text>
+
+      <rect class="llm" x="300" y="200" width="190" height="70" rx="4"/>
+      <text class="h" x="312" y="220">LLMDecider</text>
+      <text class="m" x="312" y="236">SystemPrompt (luật, schema, lỗi hay gặp)</text>
+      <text class="m" x="312" y="250">+ UserPrompt (context dạng text)</text>
+      <text class="m" x="312" y="264">→ llm.Client → JSON</text>
+
+      <rect class="step" x="500" y="200" width="200" height="70" rx="4"/>
+      <text class="h" x="512" y="220">Baselines (code)</text>
+      <text class="m" x="512" y="236">MomentumDecider: luật minh bạch</text>
+      <text class="m" x="512" y="250">RandomDecider: seeded</text>
+      <text class="m" x="512" y="264">cùng Context, cùng guards</text>
+
+      <line class="edge" x1="500" y1="270" x2="500" y2="290" marker-end="url(#arw)"/>
+      <text class="lbl" x="510" y="284">{"decisions":[{symbol, action, lots, limit_price, confidence, reasoning}]}</text>
+
+      <rect class="guard" x="300" y="290" width="400" height="90" rx="4"/>
+      <text class="h" x="312" y="309">3. ApplyGuards (code, sau khi model đã quyết)</text>
+      <text class="m" x="312" y="327">mã ngoài universe · trùng mã · lots ≤ 0 · giá viết theo nghìn → ×1000 · làm tròn bước giá</text>
+      <text class="m" x="312" y="342">kẹp vào biên độ · bán ≤ số đã về (T+2) · mua ≤ tiền và ≤ 30 % equity mỗi mã</text>
+      <text class="m" x="312" y="357">max vị thế · max lệnh/ngày · safe mode sau 3 lần decider lỗi: chỉ cho bán</text>
+      <text class="mono" x="312" y="373">mỗi thay đổi → GuardEntry{symbol, action, rule, detail}</text>
+
+      <line class="edge" x1="500" y1="380" x2="500" y2="400" marker-end="url(#arw)"/>
+
+      <rect class="step" x="300" y="400" width="400" height="70" rx="4"/>
+      <text class="h" x="312" y="419">4. paper.Account.Submit</text>
+      <text class="m" x="312" y="436">broker giả lập kiểm tra lại: lô, bước giá, biên độ, số đã về, tiền khả dụng</text>
+      <text class="m" x="312" y="450">mua → giữ chỗ tiền theo giá xấu nhất (trần + phí) · lệnh ngày cho phiên D+1</text>
+      <text class="mono" x="312" y="464">internal/paper · từ chối → broker_rejected trong guard log</text>
+
+      <line class="edge" x1="500" y1="470" x2="500" y2="490" marker-end="url(#arw)"/>
+
+      <rect class="store" x="300" y="490" width="400" height="40" rx="4"/>
+      <text class="h" x="312" y="509">5. Ghi store</text>
+      <text class="m" x="312" y="523">decision record (system + user prompt, raw reply, orders, guard log, lỗi, latency, tokens) · equity ngày D · account + state</text>
+
+      <!-- Roll -->
+      <rect class="step" x="300" y="545" width="400" height="45" rx="4"/>
+      <text class="h" x="312" y="563">engine.Roll(D+1)</text>
+      <text class="m" x="312" y="579">khớp/hết hạn lệnh chờ trên bar D+1 · lot bought D+1 về D+3 · tiền bán về D+3 · equity cuối D+1 → store</text>
+      <path class="edge" d="M500,530 V545" marker-end="url(#arw)"/>
+      <text class="lbl" x="510" y="541">phiên kế tiếp</text>
+      <path class="edge dash" d="M710,567 H740 V110 H710" marker-end="url(#arw)"/>
+      <text class="lbl" x="748" y="340" transform="rotate(90 748 340)" text-anchor="middle">Roll(D) rồi Cycle(D), mỗi phiên</text>
+
+      <!-- RIGHT: LLM endpoint -->
+      <rect class="llm" x="770" y="200" width="200" height="70" rx="4"/>
+      <text class="h" x="782" y="220">Endpoint tương thích OpenAI</text>
+      <text class="m" x="782" y="236">mặc định Vercel AI Gateway</text>
+      <text class="m" x="782" y="250">deepseek-v4.1-flash · JSON mode</text>
+      <text class="m" x="782" y="264">đổi URL: DeepSeek, OpenAI, Ollama</text>
+      <path class="edge acc" d="M490,228 H760 H770" marker-end="url(#arw)"/>
+      <path class="edge acc" d="M770,250 H500" marker-end="url(#arw)"/>
+      <text class="lbl acc" x="735" y="222" text-anchor="end">prompt</text>
+      <text class="lbl acc" x="735" y="262" text-anchor="end">raw text</text>
+
+      <!-- RIGHT: store + api + web + cli -->
+      <rect class="store" x="770" y="400" width="200" height="90" rx="4"/>
+      <text class="h" x="782" y="420">SQLite</text>
+      <text class="mono" x="830" y="420">internal/store</text>
+      <text class="m" x="782" y="437">decisions · orders · equity · state</text>
+      <text class="m" x="782" y="451">state = account JSON + engine state</text>
+      <text class="m" x="782" y="465">+ scorecard sau replay</text>
+      <text class="mono" x="782" y="481">pure Go, không cgo · 1 file</text>
+      <path class="edge st" d="M700,510 H740 V445 H770" marker-end="url(#arw)"/>
+
+      <rect class="box" x="770" y="510" width="200" height="50" rx="4"/>
+      <text class="h" x="782" y="529">API + Web</text>
+      <text class="mono" x="782" y="544">net/http mux · React nhúng · 127.0.0.1</text>
+      <text class="m" x="782" y="556">dashboard · decisions · portfolio</text>
+      <line class="edge st" x1="870" y1="490" x2="870" y2="510" marker-end="url(#arw)"/>
+
+      <rect class="box" x="770" y="575" width="200" height="60" rx="4"/>
+      <text class="h" x="782" y="594">CLI cmd/opentrade</text>
+      <text class="mono" x="782" y="610">seed · replay --from --to --decider</text>
+      <text class="mono" x="782" y="624">cycle · serve</text>
+      <path class="edge" d="M770,605 H725 V590 H710" marker-end="url(#arw)"/>
+
+      <!-- Scorecard -->
+      <rect class="store" x="30" y="610" width="660" height="70" rx="4"/>
+      <text class="h" x="42" y="630">scorecard (sau replay)</text>
+      <text class="m" x="42" y="647">equity của decider  vs  VN-Index mua và giữ cùng vốn  vs  RandomDecider chạy lại cùng khoảng ngày trong store :memory:</text>
+      <text class="m" x="42" y="662">total/annual return · max drawdown · volatility · Sharpe · số lệnh khớp · round trip FIFO · win rate sau phí</text>
+      <text class="mono" x="42" y="676">verdict: "Too short" dưới 40 phiên · "Beat both" · "Beat index not random" · "Lost to both. Do not fund this."</text>
+      <path class="edge st" d="M740,590 V655 H690" marker-end="url(#arw)"/>
+    </svg>
+    </div>
+    <figcaption>Màu cam là phần model quyết định, màu xanh là phần code chặn lại sau đó, màu tím là những gì được ghi lại để xem và đo. Baseline momentum và random đi qua đúng cùng guards và broker, nên scorecard so sánh công bằng.</figcaption>
+    <div class="legend">
+      <span><i class="s"></i>Code thường</span>
+      <span><i class="a"></i>LLM</span>
+      <span><i class="g"></i>Chốt an toàn bằng code</span>
+      <span><i class="d"></i>Ghi lại, đo được</span>
+    </div>
+  </figure>
+
+  <figure>
+    <div class="diagram">
+    <svg viewBox="0 0 1000 230" role="img" aria-label="Dòng thời gian T+2: quyết định sau giờ đóng cửa ngày D, lệnh khớp ở phiên D+1, cổ phiếu về và bán được từ D+3, tiền bán về D+3.">
+      <defs>
+        <marker id="arw2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <text class="h" x="30" y="30">Một lệnh mua đi qua thời gian (T+2 trong paper broker)</text>
+      <!-- axis -->
+      <line class="edge" x1="60" y1="120" x2="960" y2="120" marker-end="url(#arw2)"/>
+      <!-- days -->
+      <g>
+        <rect class="day" x="80" y="95" width="160" height="50" rx="4"/>
+        <text class="h" x="160" y="115" text-anchor="middle">D</text>
+        <text class="m" x="160" y="132" text-anchor="middle">sau 14:45: Cycle(D)</text>
+        <text class="m" x="160" y="70" text-anchor="middle">model ra lệnh, guards lọc,</text>
+        <text class="m" x="160" y="84" text-anchor="middle">Submit giữ chỗ tiền (trần + phí)</text>
+      </g>
+      <g>
+        <rect class="day" x="290" y="95" width="160" height="50" rx="4"/>
+        <text class="h" x="370" y="115" text-anchor="middle">D+1</text>
+        <text class="m" x="370" y="132" text-anchor="middle">Roll(D+1): khớp</text>
+        <text class="m" x="370" y="70" text-anchor="middle">market: giá mở cửa · limit: mở nếu mở ≤ limit,</text>
+        <text class="m" x="370" y="84" text-anchor="middle">limit nếu low chạm, không thì hết hạn</text>
+      </g>
+      <g>
+        <rect class="day" x="500" y="95" width="160" height="50" rx="4"/>
+        <text class="h" x="580" y="115" text-anchor="middle">D+2</text>
+        <text class="m" x="580" y="132" text-anchor="middle">giữ, chưa bán được</text>
+        <text class="m" x="580" y="77" text-anchor="middle">guard nothing_to_sell nếu model đòi bán</text>
+      </g>
+      <g>
+        <rect class="day hi" x="710" y="95" width="160" height="50" rx="4"/>
+        <text class="h" x="790" y="115" text-anchor="middle">D+3</text>
+        <text class="m" x="790" y="132" text-anchor="middle">lot settled, bán được</text>
+        <text class="m" x="790" y="77" text-anchor="middle">tiền từ lệnh bán cũng về sau 2 phiên</text>
+      </g>
+      <text class="mono" x="80" y="190">Trong lần chạy thật 09/2026: model đòi bán GAS ở D+2, guard chặn "no settled shares of GAS (held 200, settled 0)". Đây là lỗi nofx không thể phát hiện vì crypto không có T+2.</text>
+      <text class="mono" x="80" y="208">settleDate() đếm theo lịch giao dịch của provider; qua hết lịch thì đếm ngày làm việc.</text>
+    </svg>
+    </div>
+    <figcaption>Tiền và cổ phiếu chưa về được tính vào equity nhưng không được tiêu hay bán. Bảo thủ hơn broker thật, vốn thường cho ứng trước tiền bán.</figcaption>
+  </figure>
+
+  <section class="notes">
+    <div>
+      <h2>Khác nofx ở đâu</h2>
+      <div class="tbl">
+      <table>
+        <tr><th></th><th>nofx</th><th>OpenTrade</th></tr>
+        <tr><td>Nhịp</td><td>vài phút một lần</td><td>một lần mỗi phiên</td></tr>
+        <tr><td>Thị trường</td><td>crypto perps, leverage, short, 9 sàn</td><td>cổ phiếu VN, long only, luật trong engine</td></tr>
+        <tr><td>Size</td><td>model chọn USD và leverage</td><td>model chọn lô; code kẹp theo tiền và 30 % equity</td></tr>
+        <tr><td>Kiểm chứng</td><td>không có</td><td>replay + scorecard vs index vs random</td></tr>
+        <tr><td>Phụ thuộc</td><td>Vergex, Claw402, referral</td><td>CSV + endpoint OpenAI bất kỳ</td></tr>
+        <tr><td>Code</td><td>~660 file, AGPL</td><td>~30 file Go, MIT</td></tr>
+      </table>
+      </div>
+    </div>
+    <div>
+      <h2>Package</h2>
+      <ul>
+        <li><code>rules</code> hàm thuần về luật sàn; <code>indicators</code> SMA/EMA/RSI/ATR tự viết.</li>
+        <li><code>market</code> Bar, Provider, CSV, sinh dữ liệu tổng hợp theo seed.</li>
+        <li><code>engine</code> context, prompt, 3 decider, guards, Cycle/Roll/Step/Replay.</li>
+        <li><code>paper</code> lệnh ngày, lot FIFO có ngày về, tiền chờ về, giữ chỗ tiền.</li>
+        <li><code>llm</code> client HTTP tương thích OpenAI, JSON mode, retry; Fake cho test.</li>
+        <li><code>store</code> SQLite 4 bảng; <code>scorecard</code> metrics và verdict; <code>api</code> JSON + SPA nhúng.</li>
+      </ul>
+      <p style="margin-top:12px;color:var(--muted);font-size:13.5px">Mọi lệnh ra broker chỉ có một đường: qua <code>ApplyGuards</code> rồi <code>Submit</code>. Adapter đặt lệnh thật sau này đứng sau đúng hai cửa đó.</p>
+    </div>
+  </section>
+</div>
